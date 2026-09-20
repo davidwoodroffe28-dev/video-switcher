@@ -1,0 +1,13 @@
+{
+  "name": "video-switcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lightweight GStreamer-powered video switcher with an Electron control UI",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}

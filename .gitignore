@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+out/
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+engine/config.json
+
+.DS_Store
+*.log

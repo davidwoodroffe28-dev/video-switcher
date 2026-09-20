@@ -1,0 +1,36 @@
+{
+  "sources": [
+    {
+      "id": "cam1",
+      "label": "Main Camera",
+      "type": "capture",
+      "role": "cut",
+      "device": "/dev/video0"
+    },
+    {
+      "id": "bars",
+      "label": "Color Bars",
+      "type": "test",
+      "role": "cut",
+      "pattern": "smpte"
+    },
+    {
+      "id": "lower3rd",
+      "label": "Lower Thirds (NDI)",
+      "type": "ndi",
+      "role": "overlay",
+      "ndiName": "WORSHIP-PC (ProPresenter)"
+    }
+  ],
+  "program": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30
+  },
+  "preview": {
+    "port": 8080
+  },
+  "control": {
+    "port": 8765
+  }
+}

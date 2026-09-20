@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Video Switcher</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Video Switcher</h1>
+    <span id="connection-status" class="badge badge-disconnected">disconnected</span>
+  </header>
+
+  <main>
+    <section class="preview-pane">
+      <img id="preview" alt="program preview" />
+    </section>
+
+    <section class="controls-pane">
+      <div class="panel">
+        <h2>Sources</h2>
+        <div id="cut-sources" class="button-grid"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Overlay</h2>
+        <div id="overlay-sources" class="button-grid"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Stream</h2>
+        <div class="stream-form">
+          <select id="stream-kind">
+            <option value="rtmp">RTMP</option>
+            <option value="srt">SRT</option>
+          </select>
+          <input id="stream-url" type="text" placeholder="rtmp://server/app/key" />
+          <button id="stream-toggle">Start Stream</button>
+        </div>
+        <span id="stream-status" class="badge badge-off">off air</span>
+      </div>
+
+      <div id="error-log" class="error-log"></div>
+    </section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
