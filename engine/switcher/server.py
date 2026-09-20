@@ -1,11 +1,14 @@
 """Local control + preview server.
 
-- WebSocket "/ws"     JSON control protocol, also broadcasts status/error events.
-- HTTP     "/preview.mjpg"  motion-JPEG preview stream of the program output.
+- WebSocket "/ws"                JSON control protocol, also broadcasts status/error events.
+- HTTP     "/preview/program.mjpg"  motion-JPEG stream of the on-air program output.
+- HTTP     "/preview/row_a.mjpg"    motion-JPEG stream of row A (whichever role it's playing).
+- HTTP     "/preview/row_b.mjpg"    motion-JPEG stream of row B.
 
-Both are consumed directly by the Electron renderer (a <img> tag for the
-preview, a WebSocket for control) - there is no need for an extra IPC hop
-through the Electron main process.
+The renderer points its PVW monitor's <img> at row_a/row_b depending on
+which one `status.previewRow` currently says is the preview row - see
+electron/renderer.js. All of these are consumed directly by the Electron
+renderer; there is no IPC hop through Electron's main process.
 """
 import asyncio
 import json
@@ -18,27 +21,88 @@ logger = logging.getLogger("switcher.server")
 BOUNDARY = "switcherframe"
 
 
+class MjpegChannel:
+    """Fans one JPEG-frame source out to any number of HTTP clients."""
+
+    def __init__(self):
+        self.queues = set()
+
+    def broadcast_threadsafe(self, loop, data):
+        if loop is None:
+            return
+        loop.call_soon_threadsafe(lambda: loop.create_task(self._broadcast(data)))
+
+    async def _broadcast(self, data):
+        for queue in list(self.queues):
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                queue.put_nowait(data)
+            except asyncio.QueueFull:
+                pass
+
+    async def handle(self, request):
+        response = web.StreamResponse(
+            status=200,
+            headers={"Content-Type": f"multipart/x-mixed-replace; boundary={BOUNDARY}"},
+        )
+        await response.prepare(request)
+
+        queue = asyncio.Queue(maxsize=1)
+        self.queues.add(queue)
+        try:
+            while True:
+                data = await queue.get()
+                chunk = (
+                    f"--{BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(data)}\r\n\r\n"
+                ).encode("ascii") + data + b"\r\n"
+                await response.write(chunk)
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        finally:
+            self.queues.discard(queue)
+        return response
+
+
 class Server:
     def __init__(self, pipeline, config):
         self.pipeline = pipeline
         self.config = config
         self.loop = None
         self.ws_clients = set()
-        self.preview_queues = set()
 
-        self.pipeline.preview_listeners.append(self._on_preview_frame)
+        self.channels = {
+            "program": MjpegChannel(),
+            "row_a": MjpegChannel(),
+            "row_b": MjpegChannel(),
+        }
+
+        self.pipeline.preview_listeners.append(self._on_program_frame)
+        self.pipeline.row_preview_listeners["A"].append(self._on_row_a_frame)
+        self.pipeline.row_preview_listeners["B"].append(self._on_row_b_frame)
         self.pipeline.status_listeners.append(self._on_status)
         self.pipeline.error_listeners.append(self._on_error)
 
         self.app = web.Application()
         self.app.router.add_get("/ws", self._handle_ws)
-        self.app.router.add_get("/preview.mjpg", self._handle_preview)
+        self.app.router.add_get("/preview/program.mjpg", self.channels["program"].handle)
+        self.app.router.add_get("/preview/row_a.mjpg", self.channels["row_a"].handle)
+        self.app.router.add_get("/preview/row_b.mjpg", self.channels["row_b"].handle)
         self.app.router.add_get("/health", lambda req: web.json_response({"ok": True}))
 
     # --- pipeline callbacks (called from GStreamer threads) --------------
 
-    def _on_preview_frame(self, data):
-        self._call_threadsafe(self._broadcast_preview, data)
+    def _on_program_frame(self, data):
+        self.channels["program"].broadcast_threadsafe(self.loop, data)
+
+    def _on_row_a_frame(self, data):
+        self.channels["row_a"].broadcast_threadsafe(self.loop, data)
+
+    def _on_row_b_frame(self, data):
+        self.channels["row_b"].broadcast_threadsafe(self.loop, data)
 
     def _on_status(self, status):
         self._call_threadsafe(self._broadcast, {"event": "status", "data": status})
@@ -82,8 +146,10 @@ class Server:
             await ws.send_json({"event": "result", "data": {"cmd": cmd, "ok": False, "error": str(exc)}})
 
     def _dispatch(self, cmd, args):
-        if cmd == "cut":
-            self.pipeline.cut(args["id"])
+        if cmd == "load_preview":
+            self.pipeline.load_preview(args["id"])
+        elif cmd == "take":
+            self.pipeline.take(args.get("mode", "fade"), args.get("duration_ms", 500))
         elif cmd == "set_overlay":
             self.pipeline.set_overlay(bool(args.get("enabled")))
         elif cmd == "start_stream":
@@ -109,42 +175,6 @@ class Server:
         for ws in dead:
             self.ws_clients.discard(ws)
 
-    # --- MJPEG preview -----------------------------------------------------
-
-    async def _broadcast_preview(self, data):
-        for queue in list(self.preview_queues):
-            if queue.full():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-            try:
-                queue.put_nowait(data)
-            except asyncio.QueueFull:
-                pass
-
-    async def _handle_preview(self, request):
-        response = web.StreamResponse(
-            status=200,
-            headers={"Content-Type": f"multipart/x-mixed-replace; boundary={BOUNDARY}"},
-        )
-        await response.prepare(request)
-
-        queue = asyncio.Queue(maxsize=1)
-        self.preview_queues.add(queue)
-        try:
-            while True:
-                data = await queue.get()
-                chunk = (
-                    f"--{BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(data)}\r\n\r\n"
-                ).encode("ascii") + data + b"\r\n"
-                await response.write(chunk)
-        except (ConnectionResetError, asyncio.CancelledError):
-            pass
-        finally:
-            self.preview_queues.discard(queue)
-        return response
-
     # --- lifecycle -----------------------------------------------------
 
     async def run(self):
@@ -160,7 +190,7 @@ class Server:
         if preview_port != control_port:
             preview_site = web.TCPSite(runner, "127.0.0.1", preview_port)
             await preview_site.start()
-        logger.info("preview server listening on http://127.0.0.1:%s/preview.mjpg", preview_port)
+        logger.info("preview server listening on http://127.0.0.1:%s/preview/*.mjpg", preview_port)
 
         while True:
             await asyncio.sleep(3600)

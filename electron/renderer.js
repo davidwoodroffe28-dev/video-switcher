@@ -1,19 +1,29 @@
-const { wsUrl, previewUrl } = window.switcherEndpoints;
+const { wsUrl, programPreviewUrl, rowPreviewUrls } = window.switcherEndpoints;
 
-const previewImg = document.getElementById('preview');
+const programImg = document.getElementById('program-preview');
+const previewImg = document.getElementById('preview-preview');
 const connectionBadge = document.getElementById('connection-status');
 const cutContainer = document.getElementById('cut-sources');
 const overlayContainer = document.getElementById('overlay-sources');
+const cutBtn = document.getElementById('cut-btn');
+const autoBtn = document.getElementById('auto-btn');
+const fadeDurationInput = document.getElementById('fade-duration');
+const fadeDurationValue = document.getElementById('fade-duration-value');
 const streamKindSelect = document.getElementById('stream-kind');
 const streamUrlInput = document.getElementById('stream-url');
 const streamToggleBtn = document.getElementById('stream-toggle');
 const streamStatusBadge = document.getElementById('stream-status');
 const errorLog = document.getElementById('error-log');
 
-previewImg.src = previewUrl;
+programImg.src = programPreviewUrl;
 
 let ws = null;
 let lastStatus = null;
+let currentPreviewRow = null;
+
+fadeDurationInput.addEventListener('input', () => {
+  fadeDurationValue.textContent = `${fadeDurationInput.value}ms`;
+});
 
 function connect() {
   ws = new WebSocket(wsUrl);
@@ -62,7 +72,13 @@ function logError(message) {
 function applyStatus(status) {
   lastStatus = status;
   renderSources(status);
+  renderTransitionState(status);
   renderStreamState(status);
+
+  if (status.previewRow !== currentPreviewRow) {
+    currentPreviewRow = status.previewRow;
+    previewImg.src = rowPreviewUrls[currentPreviewRow];
+  }
 }
 
 function renderSources(status) {
@@ -72,9 +88,13 @@ function renderSources(status) {
   cutContainer.innerHTML = '';
   for (const source of cutSources) {
     const btn = document.createElement('button');
-    btn.className = 'source-button' + (source.id === status.activeSource ? ' active' : '');
+    const classes = ['source-button'];
+    if (source.id === status.programSource) classes.push('on-air');
+    if (source.id === status.previewSource) classes.push('in-preview');
+    btn.className = classes.join(' ');
     btn.textContent = source.label;
-    btn.addEventListener('click', () => send('cut', { id: source.id }));
+    btn.disabled = status.transitioning;
+    btn.addEventListener('click', () => send('load_preview', { id: source.id }));
     cutContainer.appendChild(btn);
   }
 
@@ -88,6 +108,11 @@ function renderSources(status) {
   }
 }
 
+function renderTransitionState(status) {
+  cutBtn.disabled = status.transitioning;
+  autoBtn.disabled = status.transitioning;
+}
+
 function renderStreamState(status) {
   if (status.streaming) {
     streamStatusBadge.textContent = 'LIVE';
@@ -99,6 +124,11 @@ function renderStreamState(status) {
     streamToggleBtn.textContent = 'Start Stream';
   }
 }
+
+cutBtn.addEventListener('click', () => send('take', { mode: 'cut' }));
+autoBtn.addEventListener('click', () =>
+  send('take', { mode: 'fade', duration_ms: Number(fadeDurationInput.value) })
+);
 
 streamToggleBtn.addEventListener('click', () => {
   if (lastStatus && lastStatus.streaming) {

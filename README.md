@@ -1,23 +1,27 @@
 # video-switcher
 
-A lightweight live video switcher: cut between camera/capture-card sources,
-overlay lower-thirds pulled in over NDI (e.g. from ProPresenter/EasyWorship),
-preview the program output, and push it out over RTMP or SRT. The media
-pipeline is GStreamer; the control surface is a small Electron app.
+A lightweight live video switcher: cut/fade between camera and capture-card
+sources on a two-stage program/preview bus like a hardware switcher, overlay
+lower-thirds pulled in over NDI (e.g. from ProPresenter/EasyWorship), mux in
+program audio, monitor program + preview, and push the result out over RTMP
+or SRT. The media pipeline is GStreamer; the control surface is a small
+Electron app.
 
 ## Architecture
 
 ```
-Electron (electron/)                 Python engine (engine/)
-┌───────────────────────┐            ┌─────────────────────────────────────┐
-│ index.html/renderer.js│  WS :8765  │ input-selector ──▶ compositor ──▶ tee│
-│  - source buttons     │◀──────────▶│   (cut sources)  (+ NDI overlay)     │
-│  - overlay toggle     │            │                          │          │
-│  - stream start/stop  │            │                          ├─▶ preview│
-│                        │  MJPEG     │                          │  (jpeg)  │
-│  <img src=".../mjpg"> │◀───:8080───│                          └─▶ RTMP/  │
-└───────────────────────┘            │                             SRT     │
-                                      └─────────────────────────────────────┘
+Electron (electron/)                     Python engine (engine/)
+┌─────────────────────────┐   WS :8765   ┌───────────────────────────────────────────┐
+│ index.html/renderer.js  │◀────────────▶│ per-source tee ─▶ sel_A ─▶ comp row A  \    │
+│  - source buttons       │              │               └─▶ sel_B ─▶ comp row B  >comp│
+│    (load into preview)  │              │  (take() crossfades/cuts between rows) /    │
+│  - CUT / AUTO(fade)     │   MJPEG x3   │  NDI overlay ───────────▶ comp (top layer)  │
+│  - overlay toggle       │◀────:8080────│                                │           │
+│  - stream start/stop    │              │                                ├─▶ tee ─▶..│
+│  <img> PGM / PVW        │              │  audio src ─▶ tee ─────────────┘   │       │
+└─────────────────────────┘              │                       ┌────────────┴─┐     │
+                                          │                  preview (jpeg)  RTMP/SRT   │
+                                          └───────────────────────────────────────────┘
 ```
 
 `electron/main.js` spawns the Python engine (`python3 -m switcher`) as a
@@ -25,21 +29,37 @@ child process and opens the control window. The renderer talks to the
 engine directly:
 
 - a WebSocket (`/ws`) for control commands and status/error events
-- a plain `<img>` tag pointed at an MJPEG endpoint (`/preview.mjpg`) for the
-  live preview - no frame data is round-tripped through Electron's main
-  process
+- three MJPEG `<img>` feeds - the on-air program monitor
+  (`/preview/program.mjpg`) and one for whichever row is currently the
+  preview bus (`/preview/row_a.mjpg` / `/preview/row_b.mjpg`, the renderer
+  switches between them based on `status.previewRow`)
 
-The engine (`engine/switcher/`) builds one GStreamer pipeline:
+No frame data is round-tripped through Electron's main process.
 
-- every **cut** source (capture card, test pattern, ...) feeds an
-  `input-selector`, so switching is an instant, glitch-free pad change
-- the selector's output is the base layer of a `compositor`
-- the **overlay** source (NDI lower-thirds) is a second compositor layer
-  whose opacity is toggled on/off at runtime - it stays composited over
-  whichever cut source is currently live
-- the composited program feeds a `tee`: one branch always runs to a JPEG
-  preview (`appsink`), a second branch is created/torn down on demand when
-  you start/stop an RTMP or SRT stream
+The engine (`engine/switcher/`) builds one GStreamer pipeline, modeled on a
+standard two-bus (program/preview) hardware switcher:
+
+- every **cut** source (capture card, test pattern, ...) feeds its own
+  `tee`, which fans into **both** row selectors (`sel_A`/`sel_B`), so either
+  row can be pointed at any source
+- exactly one row is on air (opaque, `compositor` zorder 0) and the other is
+  the hidden preview row (zorder 1, alpha 0) - clicking a source button
+  calls `load_preview`, which only ever repoints the *hidden* row, so it
+  never touches what's live
+- `take()` (CUT or AUTO) animates the hidden row's alpha 0→1 over the
+  program row - instantly for a cut, or stepped over a configurable
+  duration for a fade - then swaps which row is "on air" vs "preview" so
+  the operator can load the next source without disturbing the program
+- the **overlay** source (NDI lower-thirds) is a third compositor layer,
+  always on top, whose opacity is toggled on/off independently of whichever
+  camera is live
+- an optional **audio** source feeds its own `tee`, muxed straight into the
+  stream branch - audio does not "follow" the video cuts, the sound desk's
+  mix just plays through continuously
+- the composited program feeds a `tee`: one branch always runs to the
+  program JPEG preview, a second (video + audio) branch is created/torn
+  down on demand when you start/stop an RTMP or SRT stream
+- each row also taps its own small JPEG preview branch for the PVW monitor
 
 ## Requirements
 
@@ -98,15 +118,57 @@ npm install
 Copy `engine/config.example.json` to `engine/config.json` and edit it (or
 point `SWITCHER_CONFIG` at any path). Each entry in `sources` is either:
 
-- `"role": "cut"` - a switchable camera/capture/test source
+- `"role": "cut"` - a switchable camera/capture/test source. Add as many as
+  you like (the example ships two cameras, a color-bars test pattern, and a
+  `black` test source - see **Transitions** below for what that's for)
 - `"role": "overlay"` - the one NDI lower-thirds layer, composited on top
 
 ```json
 { "id": "cam1", "label": "Main Camera", "type": "capture", "role": "cut", "device": "/dev/video0" }
+{ "id": "cam2", "label": "Stage Wide", "type": "capture", "role": "cut", "device": "/dev/video1" }
 { "id": "lower3rd", "label": "Lower Thirds (NDI)", "type": "ndi", "role": "overlay", "ndiName": "WORSHIP-PC (ProPresenter)" }
 ```
 
-`type` is one of `capture`, `ndi`, `test`.
+`type` is one of `capture`, `ndi`, `test`. Use `v4l2-ctl --list-devices` (or
+your platform's equivalent) to find each capture card's device path -
+multiple capture cards typically show up as `/dev/video0`, `/dev/video1`, etc.
+
+### Audio
+
+```json
+"audio": { "enabled": true, "source": { "type": "alsa", "device": "hw:1,0" } }
+```
+
+`type` is `alsa` or `pulse` (point it at your sound desk's USB/audio
+interface output) or `test` (a tone, for testing without hardware). This is
+a single fixed audio feed muxed straight into the outgoing stream - it does
+not play out of the machine running the switcher (you're in the room; you
+don't want the desk mix coming out of a laptop speaker too), and it is not
+included in the on-screen preview, only in what you stream out.
+
+## Transitions
+
+For a church service, two transition types cover almost everything:
+
+- **CUT** - instant, no animation. Use this for most switches: it reads as
+  clean and intentional, and it's what people expect during normal
+  multi-camera coverage (speaker → wide shot → worship team, etc).
+- **AUTO (fade/dissolve)** - a soft crossfade, default 500ms (adjustable in
+  the UI, 150ms-2000ms). Use it for the moments you want to feel deliberate
+  rather than reactive: start/end of service, moving into a moment of
+  prayer or reflection, or bridging between a video/slide source and a
+  camera. Keep it short (300-800ms) - a slow fade reads as "trying to be
+  cinematic" and gets distracting fast in a live service.
+
+I'd deliberately recommend **against** wipes, stingers, or other flashy
+transitions for a church context - they draw attention to the switching
+itself, which is the opposite of what you want during worship or preaching.
+Cut and fade are what every serious church AV team actually uses.
+
+"Fade to black" doesn't need special support: the example config includes a
+`black` cut source, so loading it into preview and hitting AUTO gives you a
+fade-to-black exactly like any other transition (handy for the very start/
+end of a stream, or covering a dead moment).
 
 ## Running
 
@@ -128,8 +190,11 @@ UI at that already-running engine instead of spawning its own.
 
 ## Known limitations (MVP)
 
-- **Video only** - no audio path yet. Adding an `audiomixer` branch
-  alongside the video `tee`/`compositor` is the natural next step.
+- **Single fixed audio feed** - one audio source is muxed straight into the
+  stream; there's no per-camera "audio follows video" and no in-app mixing
+  or level metering. For church use this is usually exactly what you want
+  (one clean feed from the sound desk), but it means the engine doesn't
+  touch audio routing at all beyond that one feed.
 - **One overlay layer** - only a single NDI lower-third graphic is
   composited at a time; multiple simultaneous overlays aren't supported
   yet.
@@ -139,3 +204,6 @@ UI at that already-running engine instead of spawning its own.
   overlay sources are expected to carry their own alpha (RGBA); worship
   software that only outputs separate key/fill NDI streams will need an
   `alphacombine` stage added to the overlay branch.
+- Transition mixing (the alpha crossfade during AUTO) is stepped from a
+  Python thread rather than driven by `GstController`, which is simple and
+  fine at 25 steps/sec but not frame-accurate to the pipeline clock.

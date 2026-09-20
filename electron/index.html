@@ -12,14 +12,34 @@
   </header>
 
   <main>
-    <section class="preview-pane">
-      <img id="preview" alt="program preview" />
+    <section class="monitors-pane">
+      <div class="monitor">
+        <div class="monitor-label label-pgm">PROGRAM</div>
+        <img id="program-preview" alt="program preview" />
+      </div>
+      <div class="monitor">
+        <div class="monitor-label label-pvw">PREVIEW</div>
+        <img id="preview-preview" alt="preview monitor" />
+      </div>
     </section>
 
     <section class="controls-pane">
       <div class="panel">
-        <h2>Sources</h2>
+        <h2>Sources <span class="hint">(loads into preview)</span></h2>
         <div id="cut-sources" class="button-grid"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Transition</h2>
+        <div class="transition-row">
+          <button id="cut-btn" class="transition-button cut">CUT</button>
+          <button id="auto-btn" class="transition-button auto">AUTO (Fade)</button>
+          <label class="duration-label">
+            Fade
+            <input id="fade-duration" type="range" min="150" max="2000" step="50" value="500" />
+            <span id="fade-duration-value">500ms</span>
+          </label>
+        </div>
       </div>
 
       <div class="panel">

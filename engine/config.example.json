@@ -8,11 +8,25 @@
       "device": "/dev/video0"
     },
     {
+      "id": "cam2",
+      "label": "Stage Wide",
+      "type": "capture",
+      "role": "cut",
+      "device": "/dev/video1"
+    },
+    {
       "id": "bars",
       "label": "Color Bars",
       "type": "test",
       "role": "cut",
       "pattern": "smpte"
+    },
+    {
+      "id": "black",
+      "label": "Black",
+      "type": "test",
+      "role": "cut",
+      "pattern": "black"
     },
     {
       "id": "lower3rd",
@@ -22,13 +36,24 @@
       "ndiName": "WORSHIP-PC (ProPresenter)"
     }
   ],
+  "audio": {
+    "enabled": true,
+    "source": {
+      "type": "test",
+      "_comment": "Swap type to 'alsa' or 'pulse' and set 'device' to your sound desk's feed."
+    }
+  },
   "program": {
     "width": 1280,
     "height": 720,
     "fps": 30
   },
   "preview": {
-    "port": 8080
+    "port": 8080,
+    "width": 640,
+    "height": 360,
+    "rowWidth": 480,
+    "rowHeight": 270
   },
   "control": {
     "port": 8765

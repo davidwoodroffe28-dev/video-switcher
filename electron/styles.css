@@ -28,8 +28,15 @@ main {
   padding: 16px;
 }
 
-.preview-pane {
+.monitors-pane {
   flex: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.monitor {
+  position: relative;
   background: #000;
   border-radius: 6px;
   overflow: hidden;
@@ -37,13 +44,29 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 3px solid #2a2e37;
 }
 
-.preview-pane img {
+.monitor img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
+
+.monitor-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  z-index: 1;
+}
+
+.label-pgm { background: #e5484d; color: white; }
+.label-pvw { background: #4caf50; color: white; }
 
 .controls-pane {
   flex: 2;
@@ -67,6 +90,13 @@ main {
   margin: 0 0 10px;
 }
 
+.panel h2 .hint {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: #5a6070;
+}
+
 .button-grid {
   display: flex;
   flex-wrap: wrap;
@@ -88,16 +118,65 @@ main {
   border-color: #3a4050;
 }
 
-.source-button.active {
+.source-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.source-button.on-air {
   border-color: #e5484d;
   background: #3a1418;
   color: #ff8086;
+}
+
+.source-button.in-preview {
+  box-shadow: 0 0 0 2px #4caf50 inset;
 }
 
 .source-button.overlay-active {
   border-color: #4caf50;
   background: #123318;
   color: #7be08a;
+}
+
+.transition-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.transition-button {
+  padding: 12px 20px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+
+.transition-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.transition-button.cut {
+  background: #e5484d;
+  color: white;
+}
+
+.transition-button.auto {
+  background: #2f6feb;
+  color: white;
+}
+
+.duration-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #9aa1ad;
 }
 
 .stream-form {

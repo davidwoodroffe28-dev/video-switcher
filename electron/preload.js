@@ -6,5 +6,9 @@ const previewPort = process.env.SWITCHER_PREVIEW_PORT || '8080';
 
 contextBridge.exposeInMainWorld('switcherEndpoints', {
   wsUrl: `ws://${host}:${controlPort}/ws`,
-  previewUrl: `http://${host}:${previewPort}/preview.mjpg`,
+  programPreviewUrl: `http://${host}:${previewPort}/preview/program.mjpg`,
+  rowPreviewUrls: {
+    A: `http://${host}:${previewPort}/preview/row_a.mjpg`,
+    B: `http://${host}:${previewPort}/preview/row_b.mjpg`,
+  },
 });
