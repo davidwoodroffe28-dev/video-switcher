@@ -90,10 +90,24 @@ find `deviceIndex` values for `config.json`.
 
 ### Windows
 
-Install the official GStreamer runtime **and** development MSIs from
-gstreamer.freedesktop.org (pick the "complete" component set, which
-includes the Python/GI bindings), then run the app with the GStreamer
-Python from that install. Capture is via `mfvideosrc`.
+Easiest: `pip install gstreamer-bundle` (official, on PyPI since GStreamer
+1.28) into the same Python environment you run the engine with - it bundles
+the native runtime, plugins (including the GPL-licensed ones this project
+needs, like `x264enc` for streaming), *and* the Python/`gi` bindings in one
+step, no separate installer. Verified working end-to-end (all of
+`mfvideosrc`, `compositor`, `input-selector`, `x264enc`, `flvmux`/
+`rtmpsink`, `mpegtsmux`/`srtsink`, `voaacenc` present and functional) against
+GStreamer 1.28.7 this way.
+
+Alternatively, install the official unified installer from
+gstreamer.freedesktop.org (Inno Setup-based as of 1.28) - as of that
+version its `/TYPE=` silent-install switches (`runtime`, `devel`, `debug`)
+don't appear to cover the Python bindings specifically, so if you go this
+route, verify `python -c "import gi; gi.require_version('Gst','1.0'); from
+gi.repository import Gst"` actually works afterward and adjust your
+component selection if not (untested against the current installer version;
+the pip route above is the one this project has actually confirmed).
+Capture is via `mfvideosrc` either way.
 
 ### NDI (lower-thirds input)
 
@@ -225,3 +239,29 @@ UI at that already-running engine instead of spawning its own.
   what's reliably there (e.g. a v4l2 device path) and falls back to
   enumeration order otherwise - verify against `gst-device-monitor-1.0` if a
   picked device doesn't behave.
+- **Known open issue - intermittent stall with 2+ simultaneous synthetic
+  test sources on Windows.** Tested on Windows with GStreamer 1.28.7 (the
+  official `gstreamer-bundle` PyPI wheels, `pip install gstreamer-bundle` -
+  no separate MSI needed for the engine's Python/`gi` bindings, native libs,
+  or plugins; confirmed present: `mfvideosrc`, `compositor`, `input-selector`,
+  `x264enc`, `flvmux`/`rtmpsink`, `mpegtsmux`/`srtsink`, `voaacenc`, and
+  friends). With that setup, a config using two or more `"type": "test"`
+  sources (`is-live=true` `videotestsrc`) occasionally has one of them
+  produce a single buffer and then never produce again - confirmed via pad
+  probes to be non-deterministic (identical repeated runs sometimes work,
+  sometimes don't) and tied specifically to live clock pacing: forcing
+  `is-live=false` makes it disappear every time (not a real fix - it also
+  removes real-time pacing, so those sources would push frames as fast as
+  possible instead of at the configured fps). This looks like a genuine
+  GStreamer/Windows clock-contention race among multiple simultaneously
+  "live" elements rather than a bug in this repo's pipeline construction
+  (order-of-construction, `sync-streams`, and explicit clock/base-time
+  assignment were all ruled out as the cause). **Real capture sources
+  (`mfvideosrc`) are hardware/driver-timestamped, not software-clock-paced
+  like `videotestsrc`, so this likely does not affect an actual camera
+  setup** - it was only reproduced with 2-3 simultaneous synthetic test
+  sources (e.g. the `bars`/`black` fallbacks in `config.example.json`
+  running alongside each other or alongside a `test`-type stand-in for a
+  camera). Worth re-testing against the official Inno-installer GStreamer
+  build (see the Windows section above) rather than the pip bundle if it
+  turns out to matter with real hardware.

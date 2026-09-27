@@ -216,6 +216,17 @@ class SwitcherPipeline:
 
     def _build_row(self, row):
         selector = _make("input-selector", f"sel_{row}")
+        # Every cut source is wired into every row's selector (so either row
+        # can be pointed at any source), but only one pad per row is ever
+        # active - the rest sit unselected, some of them (e.g. a capture
+        # card with nothing plugged in) potentially never producing data at
+        # all. input-selector's default sync-streams=True waits for *every*
+        # sink pad to have data before releasing the active pad's output, so
+        # a never-started inactive source could wedge this row's output
+        # despite the active pad's own data flowing fine. We only ever want
+        # the active pad's stream, so this cross-pad synchronization is
+        # exactly what we don't want regardless.
+        selector.set_property("sync-streams", False)
         convert = _make("videoconvert", f"row_{row}_convert")
         scale = _make("videoscale", f"row_{row}_scale")
         caps = _make("capsfilter", f"row_{row}_caps")
@@ -331,6 +342,12 @@ class SwitcherPipeline:
         resample = _make("audioresample", "audio_resample")
         queue = _audio_queue("audio_queue")
         tee = _make("tee", "audio_tee")
+        # This tee has no linked src pad until start_stream() requests one -
+        # without allow-not-linked it posts a fatal "not-linked" stream error
+        # the moment the live audio source starts pushing buffers, which
+        # (since a bin's state change fails if any child posts ERROR) takes
+        # the *whole* pipeline down with it, video included.
+        tee.set_property("allow-not-linked", True)
 
         for el in (src_el, convert, resample, queue, tee):
             self.pipeline.add(el)

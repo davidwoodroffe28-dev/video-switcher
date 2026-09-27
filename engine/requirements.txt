@@ -1,5 +1,7 @@
 # PyGObject (the `gi` module, providing GStreamer bindings) is intentionally
 # NOT listed here: on Linux/macOS it must come from the system package
-# manager to match your installed GStreamer, and pip's PyGObject wheel does
-# not include GStreamer support. See ../README.md for install instructions.
+# manager to match your installed GStreamer, and pip's plain PyGObject wheel
+# does not include GStreamer support. On Windows, `pip install
+# gstreamer-bundle` covers both the bindings and the native GStreamer
+# runtime/plugins in one step. See ../README.md for install instructions.
 aiohttp>=3.9
