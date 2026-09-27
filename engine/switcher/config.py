@@ -2,13 +2,21 @@
 import json
 import os
 
-DEFAULT_CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.example.json"
-)
+ENGINE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_CONFIG_PATH = os.path.join(ENGINE_DIR, "config.json")
+EXAMPLE_CONFIG_PATH = os.path.join(ENGINE_DIR, "config.example.json")
 
 
 def load_config(path=None):
     path = path or os.environ.get("SWITCHER_CONFIG") or DEFAULT_CONFIG_PATH
+    if not os.path.exists(path):
+        if path == DEFAULT_CONFIG_PATH:
+            raise FileNotFoundError(
+                f"no config file at {path} - copy config.example.json to config.json "
+                "and edit it for your setup (or use the Settings screen, or point "
+                "SWITCHER_CONFIG at another file)"
+            )
+        raise FileNotFoundError(f"no config file at {path}")
     with open(path, "r") as f:
         config = json.load(f)
 

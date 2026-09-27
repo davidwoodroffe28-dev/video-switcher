@@ -16,6 +16,8 @@ import logging
 
 from aiohttp import web, WSMsgType
 
+from . import devices
+
 logger = logging.getLogger("switcher.server")
 
 BOUNDARY = "switcherframe"
@@ -158,6 +160,8 @@ class Server:
             self.pipeline.stop_stream()
         elif cmd == "get_status":
             return self.pipeline.status()
+        elif cmd == "list_devices":
+            return devices.list_devices()
         else:
             raise ValueError(f"unknown command: {cmd}")
         return None

@@ -1,4 +1,4 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 const host = process.env.SWITCHER_ENGINE_HOST || '127.0.0.1';
 const controlPort = process.env.SWITCHER_CONTROL_PORT || '8765';
@@ -11,4 +11,14 @@ contextBridge.exposeInMainWorld('switcherEndpoints', {
     A: `http://${host}:${previewPort}/preview/row_a.mjpg`,
     B: `http://${host}:${previewPort}/preview/row_b.mjpg`,
   },
+});
+
+contextBridge.exposeInMainWorld('configApi', {
+  load: () => ipcRenderer.invoke('config:load'),
+  save: (config) => ipcRenderer.invoke('config:save', config),
+});
+
+contextBridge.exposeInMainWorld('engineApi', {
+  status: () => ipcRenderer.invoke('engine:status'),
+  restart: () => ipcRenderer.invoke('engine:restart'),
 });

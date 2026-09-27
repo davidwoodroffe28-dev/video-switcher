@@ -115,8 +115,18 @@ npm install
 
 ## Configuring sources
 
-Copy `engine/config.example.json` to `engine/config.json` and edit it (or
-point `SWITCHER_CONFIG` at any path). Each entry in `sources` is either:
+The easiest way is the **Settings** tab in the Electron window: add/remove
+cameras and the overlay, pick a device from **Detect cameras / mics** (a
+best-effort scan using GStreamer's device monitor - it can't always tell
+what device string a mic needs, in which case it says so rather than
+guessing), and hit **Save config.json**. The Settings screen only edits the
+file; the engine reads it once at startup, so changes need **Restart Engine
+to apply** (the button next to Save) before they take effect.
+
+To edit by hand instead, copy `engine/config.example.json` to
+`engine/config.json` and edit it (or point `SWITCHER_CONFIG` at any path -
+both the engine and the Settings screen respect it). Each entry in
+`sources` is either:
 
 - `"role": "cut"` - a switchable camera/capture/test source. Add as many as
   you like (the example ships two cameras, a color-bars test pattern, and a
@@ -207,3 +217,11 @@ UI at that already-running engine instead of spawning its own.
 - Transition mixing (the alpha crossfade during AUTO) is stepped from a
   Python thread rather than driven by `GstController`, which is simple and
   fine at 25 steps/sec but not frame-accurate to the pipeline clock.
+- The Settings screen edits `config.json` on disk only - there's no live
+  pipeline reload, so adding/removing/rewiring a source needs a full engine
+  restart (the **Restart Engine to apply** button does this for you). Its
+  device detection (`engine/switcher/devices.py`) is best-effort: GStreamer's
+  per-platform device properties aren't consistently documented, so it reads
+  what's reliably there (e.g. a v4l2 device path) and falls back to
+  enumeration order otherwise - verify against `gst-device-monitor-1.0` if a
+  picked device doesn't behave.

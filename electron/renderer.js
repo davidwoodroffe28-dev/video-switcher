@@ -21,6 +21,16 @@ let ws = null;
 let lastStatus = null;
 let currentPreviewRow = null;
 
+// Lets other scripts (settings.js) piggyback on this one WebSocket
+// connection instead of opening a second one - e.g. to send "list_devices"
+// and hear its result.
+const bus = new EventTarget();
+window.switcherBus = {
+  send: (cmd, args) => send(cmd, args),
+  events: bus,
+  isConnected: () => !!ws && ws.readyState === WebSocket.OPEN,
+};
+
 fadeDurationInput.addEventListener('input', () => {
   fadeDurationValue.textContent = `${fadeDurationInput.value}ms`;
 });
@@ -31,11 +41,13 @@ function connect() {
   ws.addEventListener('open', () => {
     connectionBadge.textContent = 'connected';
     connectionBadge.className = 'badge badge-connected';
+    bus.dispatchEvent(new CustomEvent('connection', { detail: { connected: true } }));
   });
 
   ws.addEventListener('close', () => {
     connectionBadge.textContent = 'disconnected';
     connectionBadge.className = 'badge badge-disconnected';
+    bus.dispatchEvent(new CustomEvent('connection', { detail: { connected: false } }));
     setTimeout(connect, 1500);
   });
 
@@ -45,6 +57,7 @@ function connect() {
 
   ws.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
+    bus.dispatchEvent(new CustomEvent('message', { detail: message }));
     if (message.event === 'status') {
       applyStatus(message.data);
     } else if (message.event === 'error') {

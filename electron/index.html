@@ -8,10 +8,14 @@
 <body>
   <header>
     <h1>Video Switcher</h1>
+    <nav class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="switcher" type="button">Switcher</button>
+      <button class="tab-btn" data-tab="settings" type="button">Settings</button>
+    </nav>
     <span id="connection-status" class="badge badge-disconnected">disconnected</span>
   </header>
 
-  <main>
+  <main id="view-switcher" class="view">
     <section class="monitors-pane">
       <div class="monitor">
         <div class="monitor-label label-pgm">PROGRAM</div>
@@ -64,6 +68,55 @@
     </section>
   </main>
 
+  <main id="view-settings" class="view" hidden>
+    <section class="settings-pane">
+      <div id="cfg-banner" class="settings-banner" hidden></div>
+
+      <div class="panel">
+        <h2>Program</h2>
+        <div class="settings-row">
+          <label class="field">Width <input id="cfg-width" type="number" min="160" step="2" /></label>
+          <label class="field">Height <input id="cfg-height" type="number" min="90" step="2" /></label>
+          <label class="field">FPS <input id="cfg-fps" type="number" min="1" max="120" /></label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Sources <span class="hint">cameras, capture cards, test patterns - switchable on air</span></h2>
+        <div id="cfg-cut-rows"></div>
+        <div class="settings-actions">
+          <button id="cfg-add-cut" type="button">+ Add source</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Overlay <span class="hint">one NDI lower-thirds layer, always on top</span></h2>
+        <div id="cfg-overlay-row"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Audio</h2>
+        <div id="cfg-audio-row"></div>
+      </div>
+
+      <div class="panel">
+        <div class="settings-actions">
+          <button id="cfg-detect" type="button">Detect cameras / mics</button>
+          <span id="cfg-detect-status" class="hint"></span>
+        </div>
+      </div>
+
+      <div class="panel settings-save-panel">
+        <div id="cfg-message" class="settings-message"></div>
+        <div class="settings-actions">
+          <button id="cfg-save" type="button" class="cta">Save config.json</button>
+          <button id="cfg-restart" type="button">Restart Engine to apply</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
   <script src="renderer.js"></script>
+  <script src="settings.js"></script>
 </body>
 </html>
